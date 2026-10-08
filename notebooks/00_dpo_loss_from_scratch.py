@@ -59,8 +59,10 @@ print(f"sum log p = {total.item():.3f}   mean log p = {mean.item():.3f}")
 # %%
 def my_dpo_loss(pc, pr, rc, rr, beta=0.1):
     """pc/pr: policy log-prob chosen/rejected; rc/rr: reference. Trả về loss trung bình."""
-    # TODO: viết bằng torch.nn.functional.logsigmoid
-    return None
+    chosen_reward = beta * (pc - rc)
+    rejected_reward = beta * (pr - rr)
+    loss = -torch.nn.functional.logsigmoid(chosen_reward - rejected_reward)
+    return loss.mean()
 
 
 # %%
@@ -102,6 +104,14 @@ for margin in (-2.0, 0.0, 2.0, 5.0):
 # Hai kịch bản đều làm margin tăng 2 nat. Loss giống hệt nhau, nhưng ở kịch
 # bản B log-prob của câu *được chọn* lại giảm. DPO không phân biệt được hai
 # trường hợp này; chỉ đường cong `rewards/chosen` ở NB3 cho bạn biết.
+#
+# **Trả lời câu hỏi (Rubric NB0): Vì sao margin tăng được trong khi log-xác suất của câu chosen giảm?**
+# - Margin reward được định nghĩa là:
+#   $$\text{margin} = \beta \left[ (\log \pi_\theta(y_w) - \log \pi_{ref}(y_w)) - (\log \pi_\theta(y_l) - \log \pi_{ref}(y_l)) \right]$$
+# - Khi mô hình cập nhật trọng số, nếu log-xác suất của câu `rejected` ($\log \pi_\theta(y_l)$) bị kéo tụt xuống dốc nhanh và mạnh hơn nhiều so với mức giảm của câu `chosen` ($\log \pi_\theta(y_w)$), tức là:
+#   $$\Delta \log \pi(y_l) \ll \Delta \log \pi(y_w) < 0$$
+# - Khi đó, hiệu số $[(\log \pi_\theta(y_w) - \log \pi_{ref}(y_w)) - (\log \pi_\theta(y_l) - \log \pi_{ref}(y_l))]$ vẫn là một số dương tăng lên.
+# - Do đó, margin vẫn tăng và DPO loss vẫn giảm (như minh họa ở kịch bản B bên dưới), dù mô hình thực tế đang gán xác suất thấp hơn cho cả câu `chosen` so với mô hình tham chiếu ban đầu.
 
 # %%
 ref_c, ref_r = torch.tensor([-20.0]), torch.tensor([-22.0])
